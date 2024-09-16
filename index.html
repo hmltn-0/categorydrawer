@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Category Diagram Drawer</title>
+    <style>
+        canvas {
+            border: 1px solid black;
+            cursor: crosshair;
+        }
+        #instructions {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Category Diagram Drawer</h1>
+    <div id="instructions">
+        <p><strong>Instructions:</strong></p>
+        <ul>
+            <li>Click on the canvas to add a point (object).</li>
+            <li>Click and drag from one point to another to draw an arrow (morphism).</li>
+            <li>Composed arrows are automatically inserted.</li>
+        </ul>
+    </div>
+    <canvas id="canvas" width="800" height="600"></canvas>
+
+    <script>
+        var canvas = document.getElementById('canvas');
+        var ctx = canvas.getContext('2d');
+
+        var nodes = [];
+        var edges = [];
+        var nextNodeId = 0;
+
+        var isDragging = false;
+        var startNode = null;
+
+        canvas.addEventListener('mousedown', onMouseDown);
+        canvas.addEventListener('mousemove', onMouseMove);
+        canvas.addEventListener('mouseup', onMouseUp);
+
+        function Node(x, y, label) {
+            this.x = x;
+            this.y = y;
+            this.label = label;
+        }
+
+        function Edge(fromNode, toNode) {
+            this.from = fromNode;
+            this.to = toNode;
+        }
+
+        function onMouseDown(e) {
+            var mousePos = getMousePos(canvas, e);
+            var node = getNodeAtPos(mousePos);
+
+            if (node) {
+                // Start drawing an edge
+                isDragging = true;
+                startNode = node;
+            } else {
+                // Add a new node
+                var label = String.fromCharCode(65 + nextNodeId % 26); // A, B, C...
+                nextNodeId++;
+                var newNode = new Node(mousePos.x, mousePos.y, label);
+                nodes.push(newNode);
+                draw();
+            }
+        }
+
+        function onMouseMove(e) {
+            if (isDragging) {
+                draw();
+                var mousePos = getMousePos(canvas, e);
+                // Draw temporary line from startNode to current mouse position
+                ctx.beginPath();
+                ctx.moveTo(startNode.x, startNode.y);
+                ctx.lineTo(mousePos.x, mousePos.y);
+                ctx.strokeStyle = 'gray';
+                ctx.stroke();
+            }
+        }
+
+        function onMouseUp(e) {
+            if (isDragging) {
+                isDragging = false;
+                var mousePos = getMousePos(canvas, e);
+                var endNode = getNodeAtPos(mousePos);
+                if (endNode && endNode !== startNode) {
+                    // Add edge
+                    var newEdge = new Edge(startNode, endNode);
+                    edges.push(newEdge);
+                    // Check for compositions
+                    composeEdges();
+                    draw();
+                } else {
+                    draw(); // Redraw to clear temporary line
+                }
+            }
+        }
+
+        function getMousePos(canvas, evt) {
+            var rect = canvas.getBoundingClientRect();
+            return {
+                x: evt.clientX - rect.left,
+                y: evt.clientY - rect.top
+            };
+        }
+
+        function getNodeAtPos(pos) {
+            for (var i = 0; i < nodes.length; i++) {
+                var node = nodes[i];
+                var dx = node.x - pos.x;
+                var dy = node.y - pos.y;
+                var distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance < 20) { // Node radius
+                    return node;
+                }
+            }
+            return null;
+        }
+
+        function edgeExists(fromNode, toNode) {
+            for (var i = 0; i < edges.length; i++) {
+                var edge = edges[i];
+                if (edge.from === fromNode && edge.to === toNode) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function composeEdges() {
+            var addedNewEdge = true;
+            while (addedNewEdge) {
+                addedNewEdge = false;
+                for (var i = 0; i < edges.length; i++) {
+                    for (var j = 0; j < edges.length; j++) {
+                        var edge1 = edges[i];
+                        var edge2 = edges[j];
+                        if (edge1.to === edge2.from) {
+                            var fromNode = edge1.from;
+                            var toNode = edge2.to;
+                            if (fromNode !== toNode && !edgeExists(fromNode, toNode)) {
+                                edges.push(new Edge(fromNode, toNode));
+                                addedNewEdge = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw edges
+            for (var i = 0; i < edges.length; i++) {
+                var edge = edges[i];
+                drawArrow(edge.from, edge.to);
+            }
+
+            // Draw nodes
+            for (var i = 0; i < nodes.length; i++) {
+                var node = nodes[i];
+                drawNode(node);
+            }
+        }
+
+        function drawNode(node) {
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, 20, 0, 2 * Math.PI); // Node radius = 20
+            ctx.fillStyle = 'white';
+            ctx.fill();
+            ctx.strokeStyle = 'black';
+            ctx.stroke();
+            ctx.fillStyle = 'black';
+            ctx.font = '16px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(node.label, node.x, node.y);
+        }
+
+        function drawArrow(fromNode, toNode) {
+            var headlen = 10; // length of head in pixels
+            var dx = toNode.x - fromNode.x;
+            var dy = toNode.y - fromNode.y;
+            var angle = Math.atan2(dy, dx);
+
+            // Start point adjusted to node boundary
+            var fromX = fromNode.x + 20 * Math.cos(angle);
+            var fromY = fromNode.y + 20 * Math.sin(angle);
+
+            // End point adjusted to node boundary
+            var toX = toNode.x - 20 * Math.cos(angle);
+            var toY = toNode.y - 20 * Math.sin(angle);
+
+            ctx.beginPath();
+            ctx.moveTo(fromX, fromY);
+            ctx.lineTo(toX, toY);
+            ctx.strokeStyle = 'black';
+            ctx.stroke();
+
+            // Draw arrowhead
+            ctx.beginPath();
+            ctx.moveTo(toX, toY);
+            ctx.lineTo(toX - headlen * Math.cos(angle - Math.PI / 6), toY - headlen * Math.sin(angle - Math.PI / 6));
+            ctx.lineTo(toX - headlen * Math.cos(angle + Math.PI / 6), toY - headlen * Math.sin(angle + Math.PI / 6));
+            ctx.lineTo(toX, toY);
+            ctx.fillStyle = 'black';
+            ctx.fill();
+        }
+    </script>
+</body>
+</html>
